@@ -8,7 +8,7 @@ YouTube でライブ配信を開始した直後に、そのライブ配信の開
 
 ### 1.2 ソリューション概要
 
-Google PubSubHubbub Hub を経由した WebSub の仕組みを利用して YouTube ライブ配信開始イベントを検知し、Facebook Graph API を使用して Facebook ストーリーズに投稿するように AWS Lambda を実行する AWS サーバーレスアーキテクチャを構築する。このアプローチにより、手動操作なしでリアルタイムな通知を実現する。
+Google PubSubHubbub Hub を経由した WebSub の仕組みを利用して YouTube ライブ配信開始イベントを検知し、Facebook Graph API を使用して Facebook ストーリーズに投稿するように AWS Lambda を実行するサーバーレスアプリケーションを構築する。このアプローチにより、手動操作なしでリアルタイムな通知を実現する。
 
 ### 1.3 データフロー
 
@@ -41,7 +41,7 @@ Google PubSubHubbub Hub を経由した WebSub の仕組みを利用して YouTu
 - AWS CodeDeploy (SAM テンプレートベースのデプロイ)
 - AWS CodePipeline (CI/CD パイプライン管理)
 - AWS IAM (権限管理)
-- AWS Lambda (サーバーレスロジック実装)
+- AWS Lambda (サーバーレスアプリケーションのロジック実装)
 - AWS Systems Manager Parameter Store (シークレット管理)
 
 #### 外部サービス
@@ -148,7 +148,6 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
 本システムの開発には、以下のツールとテクノロジーを使用する:
 
 - Python 3.12 (プログラミング言語)
-  - サーバーレス環境との互換性と、多数の API クライアントライブラリの利用可能性から選定。
 - AWS SAM CLI (ローカルテストとデプロイ)
 - pytest (ユニットテスト)
 - pylint (コード静的解析)
@@ -164,10 +163,30 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
 
 コード品質と一貫性を確保するため、以下の実装規則に従う:
 
-- AWS リソースは `template.yml` に SAM テンプレートとして管理する。すべてのインフラはコードとして定義し、手動構成は行わない。
-- CI/CD パイプラインは、以下の AWS サービスを連携させて構築した AWS CodePipeline を使用し、GitHub リポジトリの main ブランチへの commit をトリガーとして実行される。
+- インフラストラクチャは全て Infrastructure as Code (IaC) で管理し、手動構成は行わない。本システムでは、目的に応じて複数のテンプレートファイルを使用する:
+
+  - **`pipeline.yml` (CloudFormation テンプレート)**: CI/CD パイプラインのリソースを定義
+
+    - AWS CodePipeline
+    - AWS CodeBuild プロジェクト
+    - AWS CodeDeploy アプリケーション
+    - CI/CD パイプラインでのデプロイプロセスに必要な IAM ロール
+
+  - **`template.yml` (SAM テンプレート)**: サーバーレスアプリケーションの実行環境のリソースを定義
+
+    - AWS Lambda 関数
+    - Amazon API Gateway
+    - Amazon DynamoDB テーブル
+    - Amazon EventBridge ルール
+    - サーバーレスアプリケーションの実行に必要な IAM ロール
+    - CloudWatch ログ
+    - Systems Manager パラメータ
+
+- 初期セットアップのみ AWS CloudFormation を使用して手動でデプロイし、以下の AWS サービスを連携した CI/CD パイプラインを手動で構築する。この CI/CD パイプラインは、GitHub リポジトリの main ブランチへの commit をトリガーとして実行される。
+
   - **AWS CodeBuild**: `buildspec.yml`で定義したビルド・テスト処理(依存関係解決、テスト実行、SAM パッケージング)
   - **AWS CodeDeploy**: `appspec.yml`で定義したデプロイ処理(Lambda 関数のデプロイと段階的トラフィック移行)
+
 - AWS Lambda 関数の Python のコードは、Python のユニットテストの stmt のカバレッジ率 80%以上をなるようにして、コード品質を担保する。ユニットテストは、以下のコマンドで実行する。
   ```bash
   coverage run -m unittest discover -s lambda/tests && coverage report -m
