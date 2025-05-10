@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: "YouTube Live to Facebook Stories - Serverless Application AWS Resources"
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 120
+    MemorySize: 256
+    Tracing: Active
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: ytlive2fbstories
+        LOG_LEVEL: INFO
+
+Resources:
+  # CloudWatch Logs
+  ApiGatewayAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/apigateway/ytlive2fbstories-apig-access
+      RetentionInDays: 30
+
+  SubmitFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/ytlive2fbstories-lambda-submit
+      RetentionInDays: 30
+
+  FBTokenFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/ytlive2fbstories-lambda-fbtoken
+      RetentionInDays: 30
+
+  WebSubFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/ytlive2fbstories-lambda-websub
+      RetentionInDays: 30
+
+  # DynamoDB Table
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ytlive2fbstories-dynamodb
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: video_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: video_id
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # Lambda Functions
+  SubmitFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ytlive2fbstories-lambda-submit
+      CodeUri: ../lambda/submit/
+      Handler: app.lambda_handler
+      Description: Process YouTube live stream notifications and post to Facebook Stories
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoDBTable
+        - SSMParameterReadPolicy:
+            ParameterName: /ytlive2fbstories/*
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref DynamoDBTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /webhook
+            Method: post
+            RestApiId: !Ref ApiGateway
+
+  FBTokenFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ytlive2fbstories-lambda-fbtoken
+      CodeUri: ../lambda/fbtoken/
+      Handler: app.lambda_handler
+      Description: Update Facebook long-lived access token
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: /ytlive2fbstories/facebook/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:PutParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/facebook/*"
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(57 days)
+            Name: ytlive2fbstories-ebrule-fbtoken
+            Description: Schedule to refresh Facebook token before it expires
+
+  WebSubFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ytlive2fbstories-lambda-websub
+      CodeUri: ../lambda/websub/
+      Handler: app.lambda_handler
+      Description: Renew Google PubSubHubbub subscription
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: /ytlive2fbstories/youtube/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:PutParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/*"
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(7 days)
+            Name: ytlive2fbstories-ebrule-websub
+            Description: Schedule to refresh WebSub subscription before it expires
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: ytlive2fbstories-apig
+      StageName: prod
+      EndpointConfiguration:
+        Type: REGIONAL
+      Auth:
+        DefaultAuthorizer: NONE
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGatewayAccessLogs.Arn
+        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "routeKey":"$context.routeKey", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
+
+  # Systems Manager Parameters
+  YouTubeChannelIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ytlive2fbstories/youtube/channel_id
+      Type: String
+      Value: default-channel-id
+      Description: YouTube Channel ID to monitor for live streams
+
+  YouTubeApiKeyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ytlive2fbstories/youtube/api_key
+      Type: SecureString
+      Value: dummy-api-key
+      Description: YouTube Data API Key
+
+  FacebookPageIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ytlive2fbstories/facebook/page_id
+      Type: String
+      Value: default-page-id
+      Description: Facebook Page ID to post stories
+
+  FacebookAccessTokenParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ytlive2fbstories/facebook/access_token
+      Type: SecureString
+      Value: dummy-access-token
+      Description: Facebook Graph API Long-lived Access Token
+
+  WebSubCallbackUrlParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ytlive2fbstories/websub/callback_url
+      Type: String
+      Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/webhook
+      Description: WebSub callback URL for PubSubHubbub notifications

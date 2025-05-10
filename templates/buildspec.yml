@@ -1,0 +1,31 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - pip install -U pip
+      - pip install pylint pytest pytest-cov coverage boto3 aws-sam-cli
+
+  pre_build:
+    commands:
+      - cd lambda
+      - pip install -r requirements.txt
+      - pylint **/*.py || true
+      - coverage run -m unittest discover -s tests && coverage report -m
+
+  build:
+    commands:
+      - cd ..
+      - sam build --template templates/sam.yml
+      - sam package --s3-bucket $ARTIFACT_BUCKET --output-template-file packaged.yaml
+
+artifacts:
+  files:
+    - packaged.yaml
+  discard-paths: no
+
+cache:
+  paths:
+    - "/root/.cache/pip/**/*"
