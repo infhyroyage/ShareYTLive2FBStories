@@ -1,29 +1,35 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "YouTube Live to Facebook Stories - CI/CD Pipeline AWS Resources"
+Description: YouTube Live to Facebook Stories - CI/CD Pipeline AWS Resources
 
 Parameters:
-  GitHubOwner:
+  ArtifactS3BucketName:
     Type: String
-    Description: GitHub Repository Owner
-
-  GitHubRepo:
-    Type: String
-    Description: GitHub Repository Name
+    Description: S3 Bucket Name for CodeBuild Artifact
 
   GitHubBranch:
     Type: String
     Description: GitHub Repository Branch
 
-  GitHubToken:
+  GitHubOwner:
     Type: String
-    Description: GitHub OAuth Token for Repository Access
+    Description: GitHub Repository Owner
+
+  GitHubPAT:
+    Type: String
+    Description: GitHub Personal Access Token
     NoEcho: true
+
+  GitHubRepo:
+    Type: String
+    Description: GitHub Repository Name
 
 Resources:
   # S3 Bucket for CodeBuild Artifact
-  ArtifactBucket:
+  ArtifactS3Bucket:
     Type: AWS::S3::Bucket
     Properties:
+      BucketName: !Ref ArtifactS3BucketName
+      Description: S3 Bucket to Store CodeBuild Artifact
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:
@@ -33,10 +39,10 @@ Resources:
     DeletionPolicy: Retain
 
   # S3 Bucket Policy for CodeBuild Artifact
-  ArtifactBucketPolicy:
+  ArtifactS3BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref ArtifactBucket
+      Bucket: !Ref ArtifactS3Bucket
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -44,12 +50,13 @@ Resources:
             Effect: Deny
             Principal: "*"
             Action: "s3:PutObject"
-            Resource: !Sub "${ArtifactBucket.Arn}/*"
+            Resource: !Sub "${ArtifactS3Bucket.Arn}/*"
             Condition:
               StringNotEquals:
                 "s3:x-amz-server-side-encryption": "AES256"
 
   # IAM Role for AWS CodeBuild
+  # TODO: 最小特権の原則に従ったIAMポリシーを設定する
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -60,7 +67,7 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns: # TODO: 最小特権の原則に従ったIAMポリシーを設定する
+      ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
         - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
       Policies:
@@ -73,14 +80,14 @@ Resources:
                   - "s3:GetObject"
                   - "s3:PutObject"
                   - "s3:GetObjectVersion"
-                Resource: !Sub "${ArtifactBucket.Arn}/*"
+                Resource: !Sub "${ArtifactS3Bucket.Arn}/*"
 
   # AWS CodeBuild
   BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
       Name: "ytlive2fbstories-build"
-      Description: "Build project for YouTube Live to Facebook Stories"
+      Description: Build Project for YouTube Live to Facebook Stories
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -95,6 +102,7 @@ Resources:
       TimeoutInMinutes: 10
 
   # IAM Role for AWS CodePipeline
+  # TODO: 最小特権の原則に従ったIAMポリシーを設定する
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -105,7 +113,7 @@ Resources:
             Principal:
               Service: codepipeline.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns: # TODO: 最小特権の原則に従ったIAMポリシーを設定する
+      ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess"
         - "arn:aws:iam::aws:policy/AWSCodeDeployFullAccess"
       Policies:
@@ -120,8 +128,8 @@ Resources:
                   - "s3:GetObjectVersion"
                   - "s3:GetBucketVersioning"
                 Resource:
-                  - !GetAtt ArtifactBucket.Arn
-                  - !Sub "${ArtifactBucket.Arn}/*"
+                  - !GetAtt ArtifactS3Bucket.Arn
+                  - !Sub "${ArtifactS3Bucket.Arn}/*"
         - PolicyName: CodePipelineGitHubAccess
           PolicyDocument:
             Version: "2012-10-17"
@@ -132,6 +140,7 @@ Resources:
                 Resource: "*"
 
   # AWS CloudFormation Execution Role
+  # TODO: 最小特権の原則に従ったIAMポリシーを設定する
   CloudFormationExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -142,7 +151,7 @@ Resources:
             Principal:
               Service: cloudformation.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns: # TODO: 最小特権の原則に従ったIAMポリシーを設定する
+      ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/AdministratorAccess"
 
   # AWS CodePipeline
@@ -150,10 +159,11 @@ Resources:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       Name: "ytlive2fbstories-pipeline"
+      Description: CI/CD Pipeline for YouTube Live to Facebook Stories
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
       ArtifactStore:
         Type: S3
-        Location: !Ref ArtifactBucket
+        Location: !Ref ArtifactS3Bucket
       Stages:
         - Name: Source
           Actions:
@@ -167,7 +177,7 @@ Resources:
                 Owner: !Ref GitHubOwner
                 Repo: !Ref GitHubRepo
                 Branch: !Ref GitHubBranch
-                OAuthToken: !Ref GitHubToken
+                OAuthToken: !Ref GitHubPAT
               OutputArtifacts:
                 - Name: SourceCode
         - Name: Build
