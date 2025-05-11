@@ -6,18 +6,15 @@ phases:
       python: 3.12
     commands:
       - pip install -U pip
-      - pip install pylint pytest pytest-cov coverage boto3 aws-sam-cli
+      - pip install -r requirements.txt
 
   pre_build:
     commands:
-      - cd lambda
-      - pip install -r requirements.txt
-      - pylint **/*.py || true
-      - coverage run -m unittest discover -s tests && coverage report -m
+      - pytest --cov=lambda --cov-report=term-missing --cov-fail-under=80 lambda/tests
+      - pylint lambda/**/*.py
 
   build:
     commands:
-      - cd ..
       - sam build --template templates/sam.yml
       - sam package --s3-bucket $ARTIFACT_BUCKET --output-template-file packaged.yaml
 
