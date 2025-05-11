@@ -67,11 +67,20 @@ Resources:
       CodeUri: ../lambda/stories/
       Handler: app.lambda_handler
       Description: Process YouTube Live Stream Notifications and Post to Facebook Stories
-      Policies: # TODO: 最小特権の原則に従ったIAMポリシーを設定する
-        - DynamoDBCrudPolicy:
-            TableName: !Ref DynamoDBTable
-        - SSMParameterReadPolicy:
-            ParameterName: /ytlive2fbstories/*
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt DynamoDBTable.Arn
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+                - ssm:GetParameters
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/*"
       Environment:
         Variables:
           DYNAMODB_TABLE: !Ref DynamoDBTable
@@ -93,12 +102,13 @@ Resources:
       CodeUri: ../lambda/fbtoken/
       Handler: app.lambda_handler
       Description: Update Facebook Long-Lived Access Token
-      Policies: # TODO: 最小特権の原則に従ったIAMポリシーを設定する
-        - SSMParameterReadPolicy:
-            ParameterName: /ytlive2fbstories/facebook/*
-        - Statement:
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
             - Effect: Allow
               Action:
+                - ssm:GetParameter
+                - ssm:GetParameters
                 - ssm:PutParameter
               Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/facebook/*"
       Events:
@@ -119,12 +129,18 @@ Resources:
       CodeUri: ../lambda/websub/
       Handler: app.lambda_handler
       Description: Renew Google PubSubHubbub Subscription
-      Policies: # TODO: 最小特権の原則に従ったIAMポリシーを設定する
-        - SSMParameterReadPolicy:
-            ParameterName: /ytlive2fbstories/youtube/*
-        - Statement:
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
             - Effect: Allow
               Action:
+                - ssm:GetParameter
+                - ssm:GetParameters
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/websub/*"
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+                - ssm:GetParameters
                 - ssm:PutParameter
               Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/*"
       Events:

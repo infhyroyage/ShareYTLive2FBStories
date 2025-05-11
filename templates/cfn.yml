@@ -6,20 +6,20 @@ Parameters:
     Type: String
     Description: S3 Bucket Name for CodeBuild Artifact
 
-  GitHubBranch:
+  GitHubBranchName:
     Type: String
-    Description: GitHub Repository Branch
+    Description: GitHub Repository Branch Name
 
-  GitHubOwner:
+  GitHubOwnerName:
     Type: String
-    Description: GitHub Repository Owner
+    Description: GitHub Repository Owner Name
 
   GitHubPAT:
     Type: String
     Description: GitHub Personal Access Token
     NoEcho: true
 
-  GitHubRepo:
+  GitHubRepositoryName:
     Type: String
     Description: GitHub Repository Name
 
@@ -56,7 +56,6 @@ Resources:
                 "s3:x-amz-server-side-encryption": "AES256"
 
   # IAM Role for AWS CodeBuild
-  # TODO: 最小特権の原則に従ったIAMポリシーを設定する
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -67,11 +66,8 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
-        - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
       Policies:
-        - PolicyName: CodeBuildArtifactAccess
+        - PolicyName: CodeBuildArtifactAccessPolicy
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -81,6 +77,23 @@ Resources:
                   - "s3:PutObject"
                   - "s3:GetObjectVersion"
                 Resource: !Sub "${ArtifactS3Bucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - "s3:ListBucket"
+                  - "s3:GetBucketLocation"
+                Resource: !GetAtt ArtifactS3Bucket.Arn
+        - PolicyName: CodeBuildCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*:*"
 
   # AWS CodeBuild
   BuildProject:
@@ -102,7 +115,6 @@ Resources:
       TimeoutInMinutes: 10
 
   # IAM Role for AWS CodePipeline
-  # TODO: 最小特権の原則に従ったIAMポリシーを設定する
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -113,11 +125,8 @@ Resources:
             Principal:
               Service: codepipeline.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess"
-        - "arn:aws:iam::aws:policy/AWSCodeDeployFullAccess"
       Policies:
-        - PolicyName: CodePipelineArtifactAccess
+        - PolicyName: CodePipelineArtifactAccessPolicy
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -130,17 +139,49 @@ Resources:
                 Resource:
                   - !GetAtt ArtifactS3Bucket.Arn
                   - !Sub "${ArtifactS3Bucket.Arn}/*"
-        - PolicyName: CodePipelineGitHubAccess
+        - PolicyName: CodePipelineCodeBuildExecutionPolicy
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - "codestar-connections:UseConnection"
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                Resource: !GetAtt BuildProject.Arn
+        - PolicyName: CodePipelineCloudFormationExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cloudformation:CreateStack"
+                  - "cloudformation:DeleteStack"
+                  - "cloudformation:DescribeStacks"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:CreateChangeSet"
+                  - "cloudformation:DeleteChangeSet"
+                  - "cloudformation:DescribeChangeSet"
+                  - "cloudformation:ExecuteChangeSet"
+                  - "cloudformation:SetStackPolicy"
+                  - "cloudformation:ValidateTemplate"
+                  - "cloudformation:GetTemplate"
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/ytlive2fbstories-stack/*"
+        - PolicyName: CodePipelineGitHubConnectionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "codestar-connections:UseConnection"
                 Resource: "*"
+        - PolicyName: CodePipelineIAMPassRolePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "iam:PassRole"
+                Resource: !GetAtt CloudFormationExecutionRole.Arn
 
   # AWS CloudFormation Execution Role
-  # TODO: 最小特権の原則に従ったIAMポリシーを設定する
   CloudFormationExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -151,8 +192,67 @@ Resources:
             Principal:
               Service: cloudformation.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AdministratorAccess"
+      Policies:
+        - PolicyName: CloudFormationResourceAccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "apigateway:*"
+                Resource: # TODO: API GatewayのAPIを特定したら、具体的なリソースARNに制限する
+                  - !Sub "arn:aws:apigateway:${AWS::Region}::*"
+              - Effect: Allow
+                Action: "logs:*"
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/ytlive2fbstories-apig"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/ytlive2fbstories-apig:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ytlive2fbstories-lambda-stories"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ytlive2fbstories-lambda-stories:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ytlive2fbstories-lambda-fbtoken"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ytlive2fbstories-lambda-fbtoken:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ytlive2fbstories-lambda-websub"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ytlive2fbstories-lambda-websub:*"
+              - Effect: Allow
+                Action: "dynamodb:*"
+                Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ytlive2fbstories-dynamodb"
+              - Effect: Allow
+                Action: "events:*"
+                Resource:
+                  - !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/ytlive2fbstories-ebrule-fbtoken"
+                  - !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/ytlive2fbstories-ebrule-websub"
+              - Effect: Allow
+                Action: "iam:*"
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/ytlive2fbstories-lambda-stories-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/ytlive2fbstories-lambda-fbtoken-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/ytlive2fbstories-lambda-websub-*"
+              - Effect: Allow
+                Action: "lambda:*"
+                Resource:
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ytlive2fbstories-lambda-stories"
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ytlive2fbstories-lambda-fbtoken"
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ytlive2fbstories-lambda-websub"
+              - Effect: Allow
+                Action: "ssm:*"
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/facebook/page_id"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/facebook/access_token"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/channel_id"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/api_key"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/websub/callback_url"
+        - PolicyName: CloudFormationIAMPassRolePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "iam:PassedToService":
+                      - "lambda.amazonaws.com"
+                      - "apigateway.amazonaws.com"
 
   # AWS CodePipeline
   Pipeline:
@@ -174,9 +274,9 @@ Resources:
                 Provider: GitHub
                 Version: "1"
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: !Ref GitHubBranch
+                Owner: !Ref GitHubOwnerName
+                Repo: !Ref GitHubRepositoryName
+                Branch: !Ref GitHubBranchName
                 OAuthToken: !Ref GitHubPAT
               OutputArtifacts:
                 - Name: SourceCode
