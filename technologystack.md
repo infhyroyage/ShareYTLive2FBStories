@@ -193,11 +193,11 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
   - **AWS CodeBuild**: `buildspec.yml`で定義したテスト・ビルド処理(依存関係解決、テスト実行、SAM パッケージング、S3 アップロード)
   - **AWS CloudFormation**: ビルドアーティファクト(`packaged.yaml`)を用いたサーバーレスアプリケーションのデプロイ
 
-- AWS Lambda 関数の Python のコードは、Python のユニットテストの stmt のカバレッジ率 80%以上をなるようにして、コード品質を担保する。ユニットテストは、以下のコマンドで実行する。
+- AWS Lambda 関数の Python のコードは、必ず Python のユニットテストの stmt のカバレッジ率 80%以上をみたすようにして、コード品質を担保する。ユニットテストは、以下のコマンドで実行する。
   ```bash
-  coverage run -m unittest discover -s lambda/tests && coverage report -m
+  pytest --cov=lambda --cov-report=term-missing --cov-fail-under=80 lambda/tests
   ```
-- AWS Lambda 関数は Python を用いてコーディングし、Pylint のデフォルトルールを採用して、コード品質を担保する。Pylint の静的解析は、以下のコマンドで実行する。
+- AWS Lambda 関数は Python を用いてコーディングし、`.pylintrc`に記載した例外を除き、必ず Pylint の警告・エラーをすべて解消するように、コード品質を担保する。Pylint の静的解析は、以下のコマンドで実行する。
   ```bash
   pylint lambda/**/*.py
   ```
