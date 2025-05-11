@@ -37,12 +37,13 @@ Google PubSubHubbub Hub を経由した WebSub の仕組みを利用して YouTu
 - Amazon CloudWatch (ログ・モニタリング)
 - Amazon DynamoDB (配信状態管理)
 - Amazon EventBridge (スケジュールタスク・自動更新)
+- Amazon S3 (ビルドアーティファクトのストレージ)
+- AWS CloudFormation (サーバーレスアプリケーションのデプロイ)
 - AWS CodeBuild (コードビルド・テスト実行)
-- AWS CodeDeploy (SAM テンプレートベースのデプロイ)
 - AWS CodePipeline (CI/CD パイプライン管理)
 - AWS IAM (権限管理)
 - AWS Lambda (サーバーレスアプリケーションのロジック実装)
-- AWS Systems Manager Parameter Store (シークレット管理)
+- AWS Systems Manager Parameter Store (パラメーター管理)
 
 #### 外部サービス
 
@@ -56,19 +57,23 @@ AWS 以外の外部サービスとも連携することにより、コア機能�
 
 以下の表は、本システムで使用する主要な AWS リソースとその役割を示している:
 
-| AWS リソース名(論理 ID)           | AWS サービス       | 概要                                                                                                |
-| --------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------- |
-| `ytlive2fbstories-apig`           | Amazon API Gateway | WebSub での YouTube ライブ配信通知を受け取る API エンドポイント                                     |
-| `ytlive2fbstories-build`          | AWS CodeBuild      | ビルドプロセスを管理するアプリケーション                                                            |
-| `ytlive2fbstories-cwlogs`         | Amazon CloudWatch  | システムログを保存するロググループ                                                                  |
-| `ytlive2fbstories-deploy`         | AWS CodeDeploy     | AWS SAM テンプレートによるデプロイプロセスを管理するアプリケーション                                |
-| `ytlive2fbstories-dynamodb`       | Amazon DynamoDB    | 処理済みの YouTube ライブ配信を記録するテーブル                                                     |
-| `ytlive2fbstories-ebrule-fbtoken` | Amazon EventBridge | Lambda`ytlive2fbstories-lambda-fbtoken`を定期実行するルール                                         |
-| `ytlive2fbstories-ebrule-websub`  | Amazon EventBridge | Lambda`ytlive2fbstories-lambda-websub`を定期実行するルール                                          |
-| `ytlive2fbstories-lambda-submit`  | AWS Lambda         | WebSub での YouTube ライブ配信通知情報をもとに、Facebook ストーリーズ投稿を実行する関数             |
-| `ytlive2fbstories-lambda-fbtoken` | AWS Lambda         | Facebook 長期アクセストークンを更新する関数                                                         |
-| `ytlive2fbstories-lambda-websub`  | AWS Lambda         | Google PubSubHubbub Hub を更新する関数                                                              |
-| `ytlive2fbstories-pipeline`       | AWS CodePipeline   | CodeBuild`ytlive2fbstories-build`・CodeDeploy`ytlive2fbstories-deploy`を管理する CI/CD パイプライン |
+| AWS リソース名(論理 ID)                              | AWS サービス       | 概要                                                                                        |
+| ---------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
+| `ytlive2fbstories-apig`                              | Amazon API Gateway | WebSub での YouTube ライブ配信通知を受け取る API エンドポイント                             |
+| `ytlive2fbstories-build`                             | AWS CodeBuild      | ビルドプロセスを管理するアプリケーション                                                    |
+| `/aws/apigateway/ytlive2fbstories-apig`              | Amazon CloudWatch  | `ytlive2fbstories-apig` のアクセスログを保存するロググループ                                |
+| `/aws/lambda/ytlive2fbstories-lambda-fbtoken`        | Amazon CloudWatch  | `ytlive2fbstories-lambda-fbtoken` のログを保存するロググループ                              |
+| `/aws/lambda/ytlive2fbstories-lambda-stories`        | Amazon CloudWatch  | `ytlive2fbstories-lambda-stories` のログを保存するロググループ                              |
+| `/aws/lambda/ytlive2fbstories-lambda-websub`         | Amazon CloudWatch  | `ytlive2fbstories-lambda-websub` のログを保存するロググループ                               |
+| `ytlive2fbstories-dynamodb`                          | Amazon DynamoDB    | 処理済みの YouTube ライブ配信を記録するテーブル                                             |
+| `ytlive2fbstories-ebrule-fbtoken`                    | Amazon EventBridge | `ytlive2fbstories-lambda-fbtoken`を定期実行するルール                                       |
+| `ytlive2fbstories-ebrule-websub`                     | Amazon EventBridge | `ytlive2fbstories-lambda-websub`を定期実行するルール                                        |
+| `ytlive2fbstories-lambda-stories`                    | AWS Lambda         | WebSub での YouTube ライブ配信通知情報をもとに、Facebook ストーリーズを投稿する Lambda 関数 |
+| `ytlive2fbstories-lambda-fbtoken`                    | AWS Lambda         | Facebook 長期アクセストークンを更新する Lambda 関数                                         |
+| `ytlive2fbstories-lambda-websub`                     | AWS Lambda         | Google PubSubHubbub Hub を更新する Lambda 関数                                              |
+| `ytlive2fbstories-pipeline`                          | AWS CodePipeline   | `ytlive2fbstories-build`・`ytlive2fbstories-stack`を管理する CI/CD パイプライン             |
+| (`ytlive2fbstories-stack`構築時にパラメーターで設定) | Amazon S3          | CI/CD パイプラインのビルドアーティファクトを保存するバケット                                |
+| `ytlive2fbstories-stack`                             | AWS CloudFormation | サーバーレスアプリケーションリソースを管理するスタック                                      |
 
 ### 2.3 AWS アーキテクチャー図
 
@@ -165,27 +170,28 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
 
 - インフラストラクチャは全て Infrastructure as Code (IaC) で管理し、手動構成は行わない。本システムでは、目的に応じて複数のテンプレートファイルを使用する:
 
-  - **`pipeline.yml` (CloudFormation テンプレート)**: CI/CD パイプラインのリソースを定義
+  - **`cfn.yml` (CloudFormation テンプレート)**: CI/CD パイプラインの AWS リソースを定義
 
+    - AWS CodeBuild
+    - AWS CloudFormation
     - AWS CodePipeline
-    - AWS CodeBuild プロジェクト
-    - AWS CodeDeploy アプリケーション
-    - CI/CD パイプラインでのデプロイプロセスに必要な IAM ロール
+    - Amazon S3
+    - 上記 AWS リソースに必要な IAM ロール・IAM ポリシー
 
-  - **`template.yml` (SAM テンプレート)**: サーバーレスアプリケーションの実行環境のリソースを定義
+  - **`sam.yml` (SAM テンプレート)**: サーバーレスアプリケーションの実行環境の AWS リソースを定義
 
-    - AWS Lambda 関数
     - Amazon API Gateway
-    - Amazon DynamoDB テーブル
-    - Amazon EventBridge ルール
-    - サーバーレスアプリケーションの実行に必要な IAM ロール
-    - CloudWatch ログ
-    - Systems Manager パラメータ
+    - Amazon CloudWatch
+    - Amazon DynamoDB
+    - Amazon EventBridge
+    - AWS Lambda
+    - AWS Systems Manager Parameter Store
+    - 上記 AWS リソースに必要な IAM ロール・IAM ポリシー
 
 - 初期セットアップのみ AWS CloudFormation を使用して手動でデプロイし、以下の AWS サービスを連携した CI/CD パイプラインを手動で構築する。この CI/CD パイプラインは、GitHub リポジトリの main ブランチへの commit をトリガーとして実行される。
 
-  - **AWS CodeBuild**: `buildspec.yml`で定義したビルド・テスト処理(依存関係解決、テスト実行、SAM パッケージング)
-  - **AWS CodeDeploy**: `appspec.yml`で定義したデプロイ処理(Lambda 関数のデプロイと段階的トラフィック移行)
+  - **AWS CodeBuild**: `buildspec.yml`で定義したテスト・ビルド処理(依存関係解決、テスト実行、SAM パッケージング、S3 アップロード)
+  - **AWS CloudFormation**: ビルドアーティファクト(`packaged.yaml`)を用いたサーバーレスアプリケーションのデプロイ
 
 - AWS Lambda 関数の Python のコードは、Python のユニットテストの stmt のカバレッジ率 80%以上をなるようにして、コード品質を担保する。ユニットテストは、以下のコマンドで実行する。
   ```bash
