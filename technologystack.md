@@ -127,7 +127,7 @@ Google PubSubHubbub Hub 登録の最大有効期間は 10 日間である。登�
 
    - 最大有効期限の 10 日間から余裕を持って更新する。
 
-2. API キーや認証情報、Google PubSubHubbub Hub 設定情報(チャンネル ID、コールバック URL、検証トークン、最終更新日時)を AWS Systems Manager Parameter Store に保管する。
+2. Google PubSubHubbub Hub 設定情報を AWS Systems Manager Parameter Store に保管する。
 
 ### 4.2 Facebook アクセストークン自動更新
 
@@ -145,7 +145,7 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
 
    - 最大有効期限の 60 日間から余裕を持って更新する。
 
-2. 長期アクセストークンと更新日時を AWS Systems Manager Parameter Store に保管する。
+2. 長期アクセストークンを AWS Systems Manager Parameter Store に保管する。
 
 ## 5. 開発・運用ガイドライン
 
@@ -160,10 +160,10 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
 
 ### 5.2 重要な制約事項
 
-セキュリティとシステム信頼性を確保するため、以下の制約事項を遵守する:
+セキュリティとシステム信頼性を確保するため、以下のパラメーターは AWS Systems Manager Parameter Store で安全に管理し、リポジトリには保存しない。
 
-- YouTube API キー、クライアント ID、シークレット、Google PubSubHubbub Hub の設定情報(チャンネル ID、コールバック URL、検証トークン)は AWS Systems Manager Parameter Store で安全に管理し、リポジトリには保存しない。
-- Facebook Graph API 長期アクセストークンは AWS Systems Manager Parameter Store で管理し、57 日ごとに自動更新する。
+- Google PubSubHubbub Hub 設定情報
+- Facebook Graph API 長期アクセストークン(57 日ごとに自動更新)
 
 ### 5.3 開発時の実装規則
 
