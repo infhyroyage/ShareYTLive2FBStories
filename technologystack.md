@@ -57,23 +57,24 @@ AWS 以外の外部サービスとも連携することにより、コア機能�
 
 以下の表は、本システムで使用する主要な AWS リソースとその役割を示している:
 
-| AWS リソース名(論理 ID)                              | AWS サービス       | 概要                                                                                        |
-| ---------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
-| `ytlive2fbstories-apig`                              | Amazon API Gateway | WebSub での YouTube ライブ配信通知を受け取る API エンドポイント                             |
-| `ytlive2fbstories-build`                             | AWS CodeBuild      | ビルドプロセスを管理するアプリケーション                                                    |
-| `/aws/apigateway/ytlive2fbstories-apig`              | Amazon CloudWatch  | `ytlive2fbstories-apig` のアクセスログを保存するロググループ                                |
-| `/aws/lambda/ytlive2fbstories-lambda-fbtoken`        | Amazon CloudWatch  | `ytlive2fbstories-lambda-fbtoken` のログを保存するロググループ                              |
-| `/aws/lambda/ytlive2fbstories-lambda-stories`        | Amazon CloudWatch  | `ytlive2fbstories-lambda-stories` のログを保存するロググループ                              |
-| `/aws/lambda/ytlive2fbstories-lambda-websub`         | Amazon CloudWatch  | `ytlive2fbstories-lambda-websub` のログを保存するロググループ                               |
-| `ytlive2fbstories-dynamodb`                          | Amazon DynamoDB    | 処理済みの YouTube ライブ配信を記録するテーブル                                             |
-| `ytlive2fbstories-ebrule-fbtoken`                    | Amazon EventBridge | `ytlive2fbstories-lambda-fbtoken`を定期実行するルール                                       |
-| `ytlive2fbstories-ebrule-websub`                     | Amazon EventBridge | `ytlive2fbstories-lambda-websub`を定期実行するルール                                        |
-| `ytlive2fbstories-lambda-stories`                    | AWS Lambda         | WebSub での YouTube ライブ配信通知情報をもとに、Facebook ストーリーズを投稿する Lambda 関数 |
-| `ytlive2fbstories-lambda-fbtoken`                    | AWS Lambda         | Facebook 長期アクセストークンを更新する Lambda 関数                                         |
-| `ytlive2fbstories-lambda-websub`                     | AWS Lambda         | Google PubSubHubbub Hub を更新する Lambda 関数                                              |
-| `ytlive2fbstories-pipeline`                          | AWS CodePipeline   | `ytlive2fbstories-build`・`ytlive2fbstories-stack`を管理する CI/CD パイプライン             |
-| (`ytlive2fbstories-stack`構築時にパラメーターで設定) | Amazon S3          | CI/CD パイプラインのビルドアーティファクトを保存するバケット                                |
-| `ytlive2fbstories-stack`                             | AWS CloudFormation | サーバーレスアプリケーションリソースを管理するスタック                                      |
+| AWS リソース名(論理 ID)                       | AWS サービス       | 概要                                                                                        |
+| --------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
+| `ytlive2fbstories-apig`                       | Amazon API Gateway | WebSub での YouTube ライブ配信通知を受け取る API エンドポイント                             |
+| `ytlive2fbstories-build`                      | AWS CodeBuild      | ビルドプロセスを管理するアプリケーション                                                    |
+| `/aws/apigateway/ytlive2fbstories-apig`       | Amazon CloudWatch  | `ytlive2fbstories-apig` のアクセスログを保存するロググループ                                |
+| `/aws/lambda/ytlive2fbstories-lambda-fbtoken` | Amazon CloudWatch  | `ytlive2fbstories-lambda-fbtoken` のログを保存するロググループ                              |
+| `/aws/lambda/ytlive2fbstories-lambda-stories` | Amazon CloudWatch  | `ytlive2fbstories-lambda-stories` のログを保存するロググループ                              |
+| `/aws/lambda/ytlive2fbstories-lambda-websub`  | Amazon CloudWatch  | `ytlive2fbstories-lambda-websub` のログを保存するロググループ                               |
+| `ytlive2fbstories-dynamodb`                   | Amazon DynamoDB    | 処理済みの YouTube ライブ配信を記録するテーブル                                             |
+| `ytlive2fbstories-ebrule-fbtoken`             | Amazon EventBridge | `ytlive2fbstories-lambda-fbtoken`を定期実行するルール                                       |
+| `ytlive2fbstories-ebrule-websub`              | Amazon EventBridge | `ytlive2fbstories-lambda-websub`を定期実行するルール                                        |
+| `ytlive2fbstories-lambda-stories`             | AWS Lambda         | WebSub での YouTube ライブ配信通知情報をもとに、Facebook ストーリーズを投稿する Lambda 関数 |
+| `ytlive2fbstories-lambda-fbtoken`             | AWS Lambda         | Facebook 長期アクセストークンを更新する Lambda 関数                                         |
+| `ytlive2fbstories-lambda-websub`              | AWS Lambda         | Google PubSubHubbub Hub を更新する Lambda 関数                                              |
+| `ytlive2fbstories-pipeline`                   | AWS CodePipeline   | `ytlive2fbstories-build`・`ytlive2fbstories-stack-pipeline`を管理する CI/CD パイプライン    |
+| (ユーザー指定)                                | Amazon S3          | CI/CD パイプラインのビルドアーティファクトを保存するバケット                                |
+| `ytlive2fbstories-stack-sam`                  | AWS CloudFormation | サーバーレスアプリケーションの AWS リソースを管理するスタック                               |
+| `ytlive2fbstories-stack-pipeline`             | AWS CloudFormation | CI/CD パイプラインの AWS リソースを管理するスタック                                         |
 
 ### 2.3 AWS アーキテクチャー図
 

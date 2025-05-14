@@ -165,7 +165,7 @@ Resources:
                   - "cloudformation:SetStackPolicy"
                   - "cloudformation:ValidateTemplate"
                   - "cloudformation:GetTemplate"
-                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/ytlive2fbstories-stack/*"
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/ytlive2fbstories-stack-pipeline/*"
         - PolicyName: CodePipelineGitHubConnectionPolicy
           PolicyDocument:
             Version: "2012-10-17"
@@ -304,7 +304,7 @@ Resources:
                 Version: "1"
               Configuration:
                 ActionMode: CREATE_UPDATE
-                StackName: ytlive2fbstories-stack
+                StackName: ytlive2fbstories-stack-pipeline
                 TemplatePath: BuildOutput::packaged.yaml
                 Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
                 RoleArn: !GetAtt CloudFormationExecutionRole.Arn
