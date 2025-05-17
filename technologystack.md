@@ -16,14 +16,13 @@ Google PubSubHubbub Hub を経由した WebSub の仕組みを利用して YouTu
 
 1. ユーザーが YouTube でライブ配信を開始する。
 2. YouTube が事前に登録された Google PubSubHubbub Hub に RSS を通知する。
-3. Google PubSubHubbub Hub が Amazon API Gateway に通知し、Amazon API Gateway が AWS Lambda 関数を起動する。
-4. AWS Lambda 関数が 配信詳細(タイトル、サムネイル URL、ライブ URL)を取得する。
+3. Google PubSubHubbub Hub が Amazon API Gateway に通知し、AWS Lambda 関数を起動する。
+4. AWS Lambda 関数が通知内容の XML を解析してライブ配信かどうかを判定し、ライブ配信の場合はそのビデオ ID を取得する。
 5. AWS Lambda 関数が Amazon DynamoDB で処理済みかチェック(重複投稿防止)する。
-6. AWS Lambda 関数が YouTube からサムネイル画像をダウンロードし、Facebook Graph API を使用してストーリーズに投稿する。
-   - サムネイル画像
-   - 配信タイトル
-   - ライブ配信への直接リンク
-7. 処理結果を Amazon DynamoDB に記録する。
+6. AWS Lambda 関数が YouTube Data API v3 を実行し、ライブ配信の動画情報を取得する。
+7. AWS Lambda 関数がサムネイル画像をダウンロードする。
+8. AWS Lambda 関数が Facebook Graph API を実行し、ストーリーズに投稿する。
+9. AWS Lambda 関数が 処理結果を Amazon DynamoDB に記録する。
 
 ## 2. アーキテクチャと技術スタック
 
@@ -43,38 +42,38 @@ Google PubSubHubbub Hub を経由した WebSub の仕組みを利用して YouTu
 - AWS CodePipeline (CI/CD パイプライン管理)
 - AWS IAM (権限管理)
 - AWS Lambda (サーバーレスアプリケーションのロジック実装)
-- AWS Systems Manager Parameter Store (パラメーター管理)
+- AWS Systems Manager Parameter Store (パラメーター・シークレット管理)
 
 #### 外部サービス
 
 AWS 以外の外部サービスとも連携することにより、コア機能を実現する:
 
-- YouTube Data API v3 (ライブ配信情報取得)
 - Facebook Graph API v14.0+ (ストーリーズ投稿)
 - GitHub (コードリポジトリ)
+- YouTube Data API v3 (動画情報取得)
 
 ### 2.2 AWS リソース構成
 
 以下の表は、本システムで使用する主要な AWS リソースとその役割を示している:
 
-| AWS リソース名(論理 ID)                       | AWS サービス       | 概要                                                                                        |
-| --------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
-| `ytlive2fbstories-apig`                       | Amazon API Gateway | WebSub での YouTube ライブ配信通知を受け取る API エンドポイント                             |
-| `ytlive2fbstories-build`                      | AWS CodeBuild      | ビルドプロセスを管理するアプリケーション                                                    |
-| `/aws/apigateway/ytlive2fbstories-apig`       | Amazon CloudWatch  | `ytlive2fbstories-apig` のアクセスログを保存するロググループ                                |
-| `/aws/lambda/ytlive2fbstories-lambda-fbtoken` | Amazon CloudWatch  | `ytlive2fbstories-lambda-fbtoken` のログを保存するロググループ                              |
-| `/aws/lambda/ytlive2fbstories-lambda-stories` | Amazon CloudWatch  | `ytlive2fbstories-lambda-stories` のログを保存するロググループ                              |
-| `/aws/lambda/ytlive2fbstories-lambda-websub`  | Amazon CloudWatch  | `ytlive2fbstories-lambda-websub` のログを保存するロググループ                               |
-| `ytlive2fbstories-dynamodb`                   | Amazon DynamoDB    | 処理済みの YouTube ライブ配信を記録するテーブル                                             |
-| `ytlive2fbstories-ebrule-fbtoken`             | Amazon EventBridge | `ytlive2fbstories-lambda-fbtoken`を定期実行するルール                                       |
-| `ytlive2fbstories-ebrule-websub`              | Amazon EventBridge | `ytlive2fbstories-lambda-websub`を定期実行するルール                                        |
-| `ytlive2fbstories-lambda-stories`             | AWS Lambda         | WebSub での YouTube ライブ配信通知情報をもとに、Facebook ストーリーズを投稿する Lambda 関数 |
-| `ytlive2fbstories-lambda-fbtoken`             | AWS Lambda         | Facebook 長期アクセストークンを更新する Lambda 関数                                         |
-| `ytlive2fbstories-lambda-websub`              | AWS Lambda         | Google PubSubHubbub Hub を更新する Lambda 関数                                              |
-| `ytlive2fbstories-pipeline`                   | AWS CodePipeline   | `ytlive2fbstories-build`・`ytlive2fbstories-stack-pipeline`を管理する CI/CD パイプライン    |
-| (ユーザー指定)                                | Amazon S3          | CI/CD パイプラインのビルドアーティファクトを保存するバケット                                |
-| `ytlive2fbstories-stack-sam`                  | AWS CloudFormation | サーバーレスアプリケーションの AWS リソースを管理するスタック                               |
-| `ytlive2fbstories-stack-pipeline`             | AWS CloudFormation | CI/CD パイプラインの AWS リソースを管理するスタック                                         |
+| AWS リソース名(論理 ID)                       | AWS サービス       | 概要                                                                                       |
+| --------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------ |
+| `ytlive2fbstories-apig`                       | Amazon API Gateway | WebSub での YouTube ライブ配信通知を受け取る API エンドポイント                            |
+| `ytlive2fbstories-build`                      | AWS CodeBuild      | ビルドプロセスを管理するアプリケーション                                                   |
+| `/aws/apigateway/ytlive2fbstories-apig`       | Amazon CloudWatch  | `ytlive2fbstories-apig` のアクセスログを保存するロググループ                               |
+| `/aws/lambda/ytlive2fbstories-lambda-fbtoken` | Amazon CloudWatch  | `ytlive2fbstories-lambda-fbtoken` のログを保存するロググループ                             |
+| `/aws/lambda/ytlive2fbstories-lambda-stories` | Amazon CloudWatch  | `ytlive2fbstories-lambda-stories` のログを保存するロググループ                             |
+| `/aws/lambda/ytlive2fbstories-lambda-websub`  | Amazon CloudWatch  | `ytlive2fbstories-lambda-websub` のログを保存するロググループ                              |
+| `ytlive2fbstories-dynamodb`                   | Amazon DynamoDB    | 処理済みの YouTube ライブ配信を記録するテーブル                                            |
+| `ytlive2fbstories-ebrule-fbtoken`             | Amazon EventBridge | `ytlive2fbstories-lambda-fbtoken`を定期実行するルール                                      |
+| `ytlive2fbstories-ebrule-websub`              | Amazon EventBridge | `ytlive2fbstories-lambda-websub`を定期実行するルール                                       |
+| `ytlive2fbstories-lambda-stories`             | AWS Lambda         | WebSub での YouTube ライブ配信通知情報をもとに Facebook ストーリーズを投稿する Lambda 関数 |
+| `ytlive2fbstories-lambda-fbtoken`             | AWS Lambda         | Facebook 長期アクセストークンを更新する Lambda 関数                                        |
+| `ytlive2fbstories-lambda-websub`              | AWS Lambda         | Google PubSubHubbub Hub を更新する Lambda 関数                                             |
+| `ytlive2fbstories-pipeline`                   | AWS CodePipeline   | `ytlive2fbstories-build`・`ytlive2fbstories-stack-pipeline`を管理する CI/CD パイプライン   |
+| (ユーザー指定)                                | Amazon S3          | CI/CD パイプラインのビルドアーティファクトを保存するバケット                               |
+| `ytlive2fbstories-stack-sam`                  | AWS CloudFormation | サーバーレスアプリケーションの AWS リソースを管理するスタック                              |
+| `ytlive2fbstories-stack-pipeline`             | AWS CloudFormation | CI/CD パイプラインの AWS リソースを管理するスタック                                        |
 
 ### 2.3 AWS アーキテクチャー図
 
@@ -86,34 +85,33 @@ AWS 以外の外部サービスとも連携することにより、コア機能�
 
 ### 3.1 YouTube ライブ配信検知
 
-YouTube の新規ライブ配信を検知するために、Google PubSubHubbub Hub を経由した WebSub の仕組みを利用する。この仕組みにより、ポーリングによる遅延や API クオーター超過を避け、リアルタイムな通知を受け取ることができる。
+YouTube の新規ライブ配信を検知するために、Google PubSubHubbub Hub を経由した WebSub の仕組みを利用する。この仕組みにより、YouTube Data API v3 のポーリング遅延やクオーター超過を避け、リアルタイムな通知を受け取ることができる。
 
-Google PubSubHubbub Hub は、以下のトピックを RSS で購読するようにサブスクリプションを登録する必要がある:
+Google PubSubHubbub Hub では、以下のトピックを RSS でライブ配信を購読するようにサブスクリプションを登録する必要がある:
 
 ```
-https://www.youtube.com/xml/feeds/videos.xml?channel_id={CHANNEL_ID}
+https://www.youtube.com/xml/feeds/videos.xml?channel_id={購読するチャンネル ID}
 ```
 
 Google PubSubHubbub Hub の登録時に、以下の設定を行う:
 
-- **トピック**: 上記 URL(特定チャンネルの動画フィードを指定)
-- **コールバック URL**: Amazon API Gateway のエンドポイント
-- **通知タイプ**: `video` (新しい動画やライブ配信が開始された場合に通知)
-- **リース期間**: 10 日間(自動更新が必要)
-
-通知が届いたら、AWS Lambda 関数で以下の処理を行う:
-
-1. XML を解析して動画 ID を抽出する。
-2. YouTube API で動画詳細を取得し、ライブ配信かどうかを判定する。
-3. ライブ配信の場合、Facebook ストーリーズに投稿する。
+| 設定項目      | 値                                                                                |
+| ------------- | --------------------------------------------------------------------------------- |
+| Callback URL  | `ytlive2fbstories-lambda-stories`の API Gateway のエンドポイント                  |
+| Topic URL     | `https://www.youtube.com/xml/feeds/videos.xml?channel_id={購読するチャンネル ID}` |
+| Verify Type   | `Asynchronous`                                                                    |
+| Mode          | `Subscribe`                                                                       |
+| Lease seconds | `828000`(10 日間)                                                                 |
 
 ### 3.2 Facebook ストーリーズの投稿
 
-YouTube ライブ配信が検知されると、長期アクセストークン(自動更新が必要)を指定した Facebook Graph API を使用して、以下の内容を含む Facebook ストーリーズを投稿する:
+長期アクセストークンを指定して Facebook Graph API を実行し、以下の内容を含む Facebook ストーリーズを投稿する:
 
-- **画像**: YouTube ライブ配信のサムネイル画像(AWS Lambda 内でダウンロードして直接アップロード)
-- **テキスト**: YouTube ライブ配信の配信タイトル
-- **リンク**: ライブ配信の URL (`https://www.youtube.com/watch?v={VIDEO_ID}`)
+- YouTube ライブ配信のサムネイル画像
+- YouTube ライブ配信の配信タイトル
+- ライブ配信の URL (`https://www.youtube.com/watch?v={ライブ配信のビデオ ID}`)
+
+上記内容は、YouTube Data API v3 を実行して取得する。
 
 ## 4. 自動更新メカニズム
 
@@ -162,8 +160,9 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
 
 セキュリティとシステム信頼性を確保するため、以下のパラメーターは AWS Systems Manager Parameter Store で安全に管理し、リポジトリには保存しない。
 
-- Google PubSubHubbub Hub 設定情報
-- Facebook Graph API 長期アクセストークン(57 日ごとに自動更新)
+- Facebook Graph API 長期アクセストークン(57 日ごとに更新)
+- Google PubSubHubbub Hub 設定情報(7 日ごとに更新)
+- YouTube Data API v3 の API キー
 
 ### 5.3 開発時の実装規則
 
@@ -173,10 +172,13 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
 
   - **`cfn.yml` (CloudFormation テンプレート)**: CI/CD パイプラインの AWS リソースを定義
 
-    - AWS CodeBuild
-    - AWS CloudFormation
-    - AWS CodePipeline
     - Amazon S3
+    - AWS CloudFormation
+    - AWS CodeBuild
+    - AWS CodePipeline
+    - AWS Systems Manager Parameter Store
+      - YouTube Data API v3 の API キー
+      - ライブ配信を購読するチャンネル ID
     - 上記 AWS リソースに必要な IAM ロール・IAM ポリシー
 
   - **`sam.yml` (SAM テンプレート)**: サーバーレスアプリケーションの実行環境の AWS リソースを定義
@@ -187,6 +189,7 @@ Facebook Graph API のアクセストークンには以下の有効期限があ�
     - Amazon EventBridge
     - AWS Lambda
     - AWS Systems Manager Parameter Store
+      - `ytlive2fbstories-lambda-stories`の API Gateway のエンドポイント
     - 上記 AWS リソースに必要な IAM ロール・IAM ポリシー
 
 - 初期セットアップのみ AWS CloudFormation を使用して手動でデプロイし、以下の AWS サービスを連携した CI/CD パイプラインを手動で構築する。この CI/CD パイプラインは、GitHub リポジトリの main ブランチへの commit をトリガーとして実行される。
