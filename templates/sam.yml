@@ -88,13 +88,13 @@ Resources:
         ApiEvent:
           Type: Api
           Properties:
-            Path: /webhook
+            Path: /stories
             Method: post
             RestApiId: !Ref ApiGateway
       LoggingConfig:
         LogGroup: !Ref StoriesLambdaFunctionLogs
 
-  # Lambda Function for Facebook Token
+  # Lambda Function to Update Facebook Token
   FBTokenLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -121,7 +121,7 @@ Resources:
       LoggingConfig:
         LogGroup: !Ref FBTokenLambdaFunctionLogs
 
-  # Lambda Function for Google PubSubHubbub Subscription
+  # Lambda Function to Renew Google PubSubHubbub Subscription
   WebSubLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -136,20 +136,15 @@ Resources:
               Action:
                 - ssm:GetParameter
                 - ssm:GetParameters
-              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/websub/*"
-            - Effect: Allow
-              Action:
-                - ssm:GetParameter
-                - ssm:GetParameters
                 - ssm:PutParameter
-              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/*"
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/websub/*"
       Events:
         ScheduleEvent:
           Type: Schedule
           Properties:
             Schedule: rate(7 days)
             Name: ytlive2fbstories-ebrule-websub
-            Description: Schedule to Refresh WebSub Subscription Before It Expires
+            Description: Schedule to Refresh Google PubSubHubbub Subscription Before It Expires
       LoggingConfig:
         LogGroup: !Ref WebSubLambdaFunctionLogs
 
@@ -167,47 +162,11 @@ Resources:
         DestinationArn: !GetAtt ApiGatewayLogs.Arn
         Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "routeKey":"$context.routeKey", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
 
-  # Systems Manager Parameter for Facebook Page ID
-  FacebookPageIdSSMParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /ytlive2fbstories/facebook/page_id
-      Type: String
-      Value: default-page-id
-      Description: Facebook Page ID to Post Stories
-
-  # Systems Manager Parameter for Facebook Access Token
-  FacebookAccessTokenSSMParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /ytlive2fbstories/facebook/access_token
-      Type: SecureString
-      Value: dummy-access-token
-      Description: Facebook Graph API Long-Lived Access Token
-
-  # Systems Manager Parameter for YouTube Channel ID
-  YouTubeChannelIdSSMParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /ytlive2fbstories/youtube/channel_id
-      Type: String
-      Value: default-channel-id
-      Description: YouTube Channel ID to Monitor for Live Streams
-
-  # Systems Manager Parameter for YouTube Data API Key
-  YouTubeApiKeySSMParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /ytlive2fbstories/youtube/api_key
-      Type: SecureString
-      Value: dummy-api-key
-      Description: YouTube Data API Key
-
-  # Systems Manager Parameter for WebSub Callback URL
+  # Systems Manager Parameter for Google PubSubHubbub Callback URL
   WebSubCallbackUrlSSMParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: /ytlive2fbstories/websub/callback_url
       Type: String
-      Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/webhook
-      Description: WebSub Callback URL for PubSubHubbub Notifications
+      Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/stories
+      Description: Google PubSubHubbub Callback URL

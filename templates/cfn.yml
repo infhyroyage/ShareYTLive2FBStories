@@ -23,7 +23,34 @@ Parameters:
     Type: String
     Description: GitHub Repository Name
 
+  YouTubeApiKey:
+    Type: String
+    Description: API Key for YouTube Data API v3
+    NoEcho: true
+
+  YouTubeChannelId:
+    Type: String
+    Description: YouTube Channel ID to Monitor for Live Streams
+
 Resources:
+  # Systems Manager Parameter for YouTube Data API Key
+  YouTubeApiKeySSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ytlive2fbstories/youtube/api_key
+      Type: SecureString
+      Value: !Ref YouTubeApiKey
+      Description: API Key for YouTube Data API v3
+
+  # Systems Manager Parameter for YouTube Channel ID
+  YouTubeChannelIdSSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /ytlive2fbstories/youtube/channel_id
+      Type: String
+      Value: !Ref YouTubeChannelId
+      Description: YouTube Channel ID to Monitor for Live Streams
+
   # S3 Bucket for CodeBuild Artifact
   ArtifactS3Bucket:
     Type: AWS::S3::Bucket
@@ -235,10 +262,8 @@ Resources:
               - Effect: Allow
                 Action: "ssm:*"
                 Resource:
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/facebook/page_id"
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/facebook/access_token"
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/channel_id"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/api_key"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/youtube/channel_id"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ytlive2fbstories/websub/callback_url"
         - PolicyName: CloudFormationIAMPassRolePolicy
           PolicyDocument:
